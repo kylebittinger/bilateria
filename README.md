@@ -2,6 +2,9 @@
 Code for generating figures and statistics for bilaterian animal microbiome project
 The bulk of the code for this project can be found in bilateria.R.
 
+# DATA FORTHCOMING
+There were some technical difficulties compressing our data for upload.  Data should be made available on 11/6/2017.
+
 # R libraries
 You will need to have the following R libraries installed for various code chunks:
 

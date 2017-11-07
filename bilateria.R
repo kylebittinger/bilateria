@@ -23,33 +23,16 @@ library(ade4)
 
 work_dir <- "/home/kevin/projects/bilateria/"
 
-mapping_file_name <- "map.tsv"
-mapping_file_fp <- file.path(work_dir, "map", mapping_file_name)
-
-otu_file_name <- "otu_table.txt"
-otu_table_fp <- file.path(work_dir, "otu", otu_file_name)
-
-uu_fp <- file.path(work_dir, "beta_diversity", "unweighted_unifrac_otu_table.original.txt")
-wu_fp <- file.path(work_dir, "beta_diversity", "weighted_unifrac_otu_table.original.txt")
-
-#om <- melt(G$o$counts)
-#om <- om[om$value>0,]
-#om$metadata <- G$o$metadata[om$Var1]
-#colnames(om) <- c("OTU","SampleID","count","metadata")
-#write.csv(om, paste0(work_dir,"om.csv"), row.names = F)
-
-#o <- dcast(data = om,formula = OTU~SampleID,fun.aggregate = sum,value.var = "count")
-#rownames(o) <- o$OTU
-#o2 <- as.matrix(o)
+mapping_file_fp <- file.path(work_dir, "map/map.tsv")
+otu_table_fp <- file.path(work_dir, "otu/otu_table.txt")
+uu_fp <- file.path(work_dir, "beta_diversity/unweighted_unifrac_otu_table.original.txt")
+wu_fp <- file.path(work_dir, "beta_diversity/weighted_unifrac_otu_table.original.txt")
 
 # Functions----
 
 resetValidationData <- function(E, status = "all") {
   library(qiimer)
   E$o <- read_qiime_otu_table(E$otuTableFile)
-  #  system(paste0("wget -O ",
-  #                val_mapping_file_fp,
-  #                " \"https://docs.google.com/spreadsheets/d/e/2PACX-1vQTcY0pDyrJm3aOw2ZWyHmEb1KfixrRArsmxVNbQftjBW78M48jo82_aV3u4hCDq7wkfsCCcNRFrfz5/pub?gid=1015142819&single=true&output=tsv\""))
   E$s <- read_qiime_mapping_file(E$mapFile)
   if(status=="toUse") {
     E$s <- E$s[E$s$toKeep=="keep" & !is.na(E$s$weight),]
@@ -98,9 +81,6 @@ resetData <- function(status = "all") {
   library(adephylo)
   
   G <<- new.env()
-  system(paste0("wget -O ",
-                mapping_file_fp,
-                " \"https://docs.google.com/spreadsheets/d/1_iLCOcV43hdYuPBsKQD9mvppHsEnmhtCCtwlnDruFCk/pub?gid=1469250691&single=true&output=tsv\""))
   G$s <- read_qiime_mapping_file(mapping_file_fp)
   if(status=="toUse") {
     G$s <- G$s[G$s$toKeep=="keep" & !is.na(G$s$Weight_to_use),]
@@ -110,18 +90,36 @@ resetData <- function(status = "all") {
     G$s <- G$s[G$s$toKeep=="keep" | G$s$sample_type %in% c("GeneBlock","Extraction_blank",
                                                            "Dissection_blank", "PCR_H2O"),]
   }
-  
-  #G$o <- read_qiime_otu_table(otu_table_fp)
 
-  om <- read.csv(paste0(work_dir,"om.csv"))
-  o <- dcast(data = om,formula = OTU~SampleID,fun.aggregate = sum,value.var = "count")
-  rownames(o) <- o$OTU
-  G$o$counts <- as.matrix(o)
-  uniq_metadata <- unique(om[,c("OTU","metadata")])
-  G$o$sample_ids <- colnames(G$o$counts)
-  G$o$otu_ids <- rownames(G$o$counts)
-  G$o$metadata <- as.character(uniq_metadata$metadata)
-  names(G$o$metadata) <- as.character(uniq_metadata$OTU)
+  # Code used to create om.csv (om = OTU melted)
+  # om <- melt(G$o$counts)
+  # om <- om[om$value>0,]
+  # om$metadata <- G$o$metadata[om$Var1]
+  # colnames(om) <- c("OTU","SampleID","count","metadata")
+  # write.csv(om, paste0(work_dir,"om.csv"), row.names = F)
+
+  # Code to read in om.csv and create G$o object  
+  # om <- read.csv(paste0(work_dir,"om.csv"))
+  # o <- dcast(data = om,formula = OTU~SampleID,fun.aggregate = sum,value.var = "count")
+  # rownames(o) <- o$OTU
+  # G$o$counts <- as.matrix(o)
+  # uniq_metadata <- unique(om[,c("OTU","metadata")])
+  # G$o$sample_ids <- colnames(G$o$counts)
+  # G$o$otu_ids <- rownames(G$o$counts)
+  # G$o$metadata <- as.character(uniq_metadata$metadata)
+  # names(G$o$metadata) <- as.character(uniq_metadata$OTU)
+  # rm(uniq_metadata)
+  # rm(o)
+  # rm(om)
+  
+  # Use this code to create OTU table to save time on future loads
+  # write.table(cbind(G$o$counts,G$o$metadata),
+  #            paste0(work_dir,"otu/otu_table.txt"), quote=FALSE, sep = "\t")
+  # system(paste0("sed -i '1s/^/# Constructed from biom file\\n#OTU ID\t/' ",work_dir,"otu/otu_table.txt"))
+  # system(paste0("sed -i '2s/$/Consensus Lineage/' ",work_dir,"otu/otu_table.txt"))
+  
+  # Use this line in place of the above code block defining G$o if you have already created OTU table
+  G$o <- read_qiime_otu_table(otu_table_fp)
   
   alignQiimeData(G)
   rownames(G$s) <- G$s$SampleID
@@ -160,32 +158,16 @@ resetData <- function(status = "all") {
                                   ave(1:nrow(G$speciesTax),G$speciesTax$order,FUN=length),order,
                                   ave(1:nrow(G$speciesTax),G$speciesTax$family,FUN=length),family,
                                   ave(1:nrow(G$speciesTax),G$speciesTax$genus,FUN=length),genus))
-  
+
+  G$s$speciesOrder <- match(G$s$common,G$speciesTax$common[G$figure1SpeciesOrdering])
+    
   md <- sub("(; [kpcofgs]__)+$", "", G$o$metadata, perl=T)
   adf <- split_assignments(md)
   G$a <- simplify_assignments(adf)
   rm(md); rm(adf)
   
-  G$newick <- read.tree(paste0(work_dir, "speciesList.nwk"))
-  G$newick <- expandTree(G$newick, "Negaprion_brevirostris","Galeocerdo_cuvier",56)
-  G$newick <- expandTree(G$newick, "Negaprion_brevirostris","Carcharhinus_leucas",49)
-  G$newick <- expandTree(G$newick, "Carcharhinus_leucas","Carcharhinus_plumbeus",25)
-  G$newick <- expandTree(G$newick, "Pan_troglodytes","Pan_troglodytes_verus",0.6)
-  G$newick <- expandTree(G$newick, "Pan_troglodytes","Pan_troglodytes_schweinfurthii",0.4)
-  G$newick <- expandTree(G$newick, "Pan_troglodytes","Pan_troglodytes_ellioti",0.3)
-  G$newick <- expandTree(G$newick, "Farfantepenaeus_duorarum","Porcellio_laevis",355)
-  G$newick <- expandTree(G$newick, "Apis_mellifera","Anthidium_manicatum",110)
-  G$newick <- expandTree(G$newick, "Apis_mellifera","Bombus_bimaculatus",102)
-  G$newick <- expandTree(G$newick, "Apis_mellifera","Melissodes_bimaculata",101)
-  G$newick <- expandTree(G$newick, "Cimex_lectularius","Anasa_tristis",244)
-  G$newick <- expandTreeInternal(G$newick, 107, "Anopheles_stephensi", 271)
-  G$newick <- expandTreeInternal(G$newick, 64, "Thyonella_gemmata", 680)
-  G$newick <- expandTreeInternal(G$newick, 99, "Archispirostreptus_gigas", 583)
-  G$newick$tip.label[G$newick$tip.label=='Pan_troglodytes'] <- 'Pan_troglodytes_troglodytes'
-  G$newick <- ladderize(G$newick)
-  G$newick <- drop.tip(G$newick,"Homo_sapiens")
-  G$newick <- expandTreeInternal(G$newick, 73, "Homo_sapiens", 6.65)
-  
+  G$newick <- read.tree(paste0(work_dir, "speciesPhylogeny.nwk"))
+
   G$timetreeLabels <-
     tolower(gsub("_"," ",
                  G$newick$tip.label[G$newick$edge[,2][G$newick$edge[,2]<=length(G$newick$tip.label)]]))
@@ -197,30 +179,19 @@ resetData <- function(status = "all") {
   G$species <-
     as.data.frame(unique(G$s[match(G$speciesTax$common[G$figure1SpeciesOrdering],G$s$common),
                              c("common","phylum","class","order","family","diet","specificDiet","timetree_proxy")]))
+  G$species <- G$species[G$species$common %in% G$speciesTax$common[G$figure1SpeciesOrdering],]
   rownames(G$species) <- G$species$common
-  
 }
 
 resetUnifracData <- function(){
   library(qiimer)
-  G$uur_fp <- file.path(work_dir, "beta_diversity_good_rareCounts", "unweighted_unifrac_otu_rareCounts.txt")
+  G$uur_fp <- file.path(work_dir, "bd_uur", "unweighted_unifrac_otu_rare.txt")
   G$uur <- read_qiime_distmat(G$uur_fp)
-  attr(G$uur,"Labels")[attr(G$uur,"Labels")=="HornwomParasite.3.Gut.1.1"] <- "HornwormParasite.3.Gut.1.1"
-  attr(G$uur,"Labels")[attr(G$uur,"Labels")=="Bonobo.BI0331.Feces.1.1"] <- "Pig.BI0331.Feces.1.1"
-  attr(G$uur,"Labels")[attr(G$uur,"Labels")=="Dog.G.Feces.2.1"] <- "temp"
-  attr(G$uur,"Labels")[attr(G$uur,"Labels")=="Dog.O.Feces.2.1"] <- "Dog.G.Feces.2.1"
-  attr(G$uur,"Labels")[attr(G$uur,"Labels")=="temp"] <- "Dog.O.Feces.2.1"
   G$uur <- dist_subset(G$uur, G$s$SampleID)
 
-  G$wnu_fp <- file.path(work_dir, "beta_diversity_good_prop2", "weighted_normalized_unifrac_otu_table.txt")
+  G$wnu_fp <- file.path(work_dir, "bd_wnu", "weighted_unifrac_otu_prop.txt")
   G$wnu <- read_qiime_distmat(G$wnu_fp)
-  attr(G$wnu,"Labels")[attr(G$wnu,"Labels")=="HornwomParasite.3.Gut.1.1"] <- "HornwormParasite.3.Gut.1.1"
-  attr(G$wnu,"Labels")[attr(G$wnu,"Labels")=="Bonobo.BI0331.Feces.1.1"] <- "Pig.BI0331.Feces.1.1"
-  attr(G$wnu,"Labels")[attr(G$wnu,"Labels")=="Dog.G.Feces.2.1"] <- "temp"
-  attr(G$wnu,"Labels")[attr(G$wnu,"Labels")=="Dog.O.Feces.2.1"] <- "Dog.G.Feces.2.1"
-  attr(G$wnu,"Labels")[attr(G$wnu,"Labels")=="temp"] <- "Dog.O.Feces.2.1"
   G$wnu <- dist_subset(G$wnu, G$s$SampleID)
-
 }
 
 alignQiimeData <- function(E) {
@@ -531,28 +502,33 @@ plotTsneLegends <- function() {
   legend(
     par('usr')[2]+.01*diff(par('usr')[1:2]), # x pos a bit to right of right border
     par('usr')[4], #y pos in middle of plot
-    names(G$classColors[[1]]), col=G$classColors[[1]], pch=1, # labels and annotations here
+    names(G$classColors), col=G$classColors, pch=1, # labels and annotations here
     xjust=0,xpd=NA #left justify and plot outside region
   )
   legend(
     par('usr')[2]+.01*diff(par('usr')[1:2]), # x pos a bit to right of right border
     par('usr')[4]-0.4*diff(par('usr')[3:4]), #y pos in middle of plot
-    names(G$mammalOrderShapeLegend[,1]), pch=as.numeric(G$mammalOrderShapeLegend[,3]),
-    col=G$classColors[[1]]['Mammalia'],
+    names(G$mammalOrderShapeLegend), pch=as.numeric(G$mammalOrderShapeLegend),
+    col=G$classColors['Mammalia'],
     xjust=0,xpd=NA #left justify and plot outside region
   )
   legend(
     par('usr')[2]+.01*diff(par('usr')[1:2]), # x pos a bit to right of right border
     par('usr')[4]-0.7*diff(par('usr')[3:4]), #y pos in middle of plot
-    names(G$insectOrderShapeLegend[,1]), pch=as.numeric(G$insectOrderShapeLegend[,3]),
-    col=G$classColors[[1]]['Insecta'],
+    names(G$insectOrderShapeLegend), pch=as.numeric(G$insectOrderShapeLegend),
+    col=G$classColors['Insecta'],
     xjust=0,xpd=NA #left justify and plot outside region
   )
+}
+
+countsToProp <- function(counts) {
+  return(apply(counts, 2, function(x)   ifelse (x, x / sum(x),0)))
 }
 
 
 
 # Export OTU tables----
+# NEEDS UPDATING----
 
 # All samples
 resetData()
@@ -600,30 +576,29 @@ write.table(cbind(G$o$metadata[rownames(G$finalOtuTable)],G$finalOtuTable),
             row.names=T,sep=",",quote = FALSE)
 
 
-# Figure A3----
-# Reads by OTU Phylum
 
+
+# Run Unifrac----
 resetData("toUse")
+G$o$prop <- countsToProp(G$o$counts)
+write.table(cbind(G$o$prop,G$o$metadata),paste0(work_dir,"otu/otu_prop.txt"), quote = F, sep = "\t")
+system(paste0("sed -i '1s/^/# Constructed from biom file\\n#OTU ID\t/' ",work_dir,"otu/otu_prop.txt"))
+system(paste0("sed -i '2s/$/Consensus Lineage/' ",work_dir,"otu/otu_prop.txt"))
+system(paste0("biom convert -i ",work_dir,"otu/otu_prop.txt -o ",work_dir,
+              "otu/otu_prop.biom --table-type=\"OTU table\" --to-hdf5"))
+system(paste0("beta_diversity.py -i ",work_dir,"otu/otu_prop.biom -o ",work_dir,
+              "bd_wnu -t ",work_dir,"otu/rep_set.tre -m weighted_unifrac"))
 
-#load(paste0(work_dir, "R//good.20170830.RData")
+G$o$rare <- apply(G$o$counts,2,function(x) rarefyCounts(x,1000))
+rownames(G$o$rare) <- rownames(G$o$counts)
+write.table(cbind(G$o$rare,G$o$metadata),paste0(work_dir,"otu/otu_rare.txt"), quote = F, sep = "\t")
+system(paste0("sed -i '1s/^/# Constructed from biom file\\n#OTU ID\t/' ",work_dir,"otu/otu_rare.txt"))
+system(paste0("sed -i '2s/$/Consensus Lineage/' ",work_dir,"otu/otu_rare.txt"))
+system(paste0("biom convert -i ",work_dir,"otu/otu_rare.txt -o ",work_dir,
+              "otu/otu_rare.biom --table-type=\"OTU table\" --to-hdf5"))
+system(paste0("beta_diversity.py -i ",work_dir,"otu/otu_rare.biom -o ",work_dir,
+              "bd_uur -t ",work_dir,"otu/rep_set.tre -m weighted_unifrac"))
 
-G$aPhylum <- sub("; c__(.)*$", "", G$o$metadata, perl=T)
-G$oByPhylum <- rowsum(G$o$counts,G$aPhylum)
-
-dataToPlot <- sort(rowSums(G$oByPhylum), decreasing = T)[1:9]
-dataToPlot <- data.frame(value=dataToPlot,phylum=names(dataToPlot))
-
-dataToPlot$phylum <- with(dataToPlot, factor(phylum, levels=c("Other",as.character(phylum[order(value)]))))
-dataToPlot[10,] <- cbind(sum(sort(rowSums(G$oByPhylum), decreasing = T)[-c(1:9)]), "Other")
-
-dataToPlot$value <- as.numeric(dataToPlot$value) / 1e6
-
-pdf(paste0(work_dir, "R_plots/supp3.pdf"), width = 10, height = 7)
-ggplot(dataToPlot, aes(x=phylum, y=value)) + geom_bar(stat="identity") +
-  coord_flip() + theme_bw() +
-  labs(y = "Number of reads (in millions)", x = "OTU Phylum") +
-  theme(panel.grid.major.y = element_blank(), panel.grid.minor = element_blank())
-dev.off()
 
 # Figure 1----
 
@@ -842,11 +817,7 @@ plotUniqueToSpecies <- ggplot(G$pubsDf,aes(x=common,y=value,fill="green")) +
 
 # Barchart of obligate anaerobes
 
-G$s$speciesOrder <- match(G$s$common,G$speciesTax$common[G$figure1SpeciesOrdering])
-
-#NEEDS FIXING----
-#Copy this file to Github
-G$anaerobeTable <-read.csv("/home/kyle/bilaterian-pheno/bilaterian_aerotolerance.csv",header=T,
+G$anaerobeTable <-read.csv(paste0(work_dir,"bilaterian_aerotolerance.csv"),header=T,
                            na.strings="<NA>",stringsAsFactors = F)
 G$anaerobeTable$SampleID[G$anaerobeTable$SampleID=="Bonobo.BI0331.Feces.1.1"] <- "Pig.BI0331.Feces.1.1"
 G$anaerobeTable$speciesOrder <- G$s[G$anaerobeTable$SampleID,"speciesOrder"]
@@ -897,6 +868,7 @@ vplayout <- function(x, y) viewport(layout.pos.row = x, layout.pos.col = y)
 
 pdf(paste0(work_dir, "R_plots/figure1.final.pdf"),
     height=15, width=20, onefile = FALSE)
+library(grid)
 grid.newpage()
 pushViewport(viewport(layout = grid.layout(1000, 14)))
 print(newickPlot, vp = vplayout(1:935, 1:2))
@@ -907,79 +879,43 @@ print(plotUnassigned, vp = vplayout(33:921, 11))
 print(plotUniqueToSpecies, vp = vplayout(33:921, 12))
 print(plotWolbachia, vp = vplayout(33:921, 13))
 print(plotObligateAnaerobes, vp = vplayout(33:921, 14))
-
-
 dev.off()
 
 
-# Figure SX----
-# Aerobic status of bacteria
+# Figure 2 (tSNE)----
+# PCoA, tsne, heatmaps for final figures
 
-G$aerobeTable <-
-  G$anaerobeTable[G$anaerobeTable$aerobic_status_corrected=="aerobe",]
-G$s$aerobeProp <- 0
-G$s$aerobeProp[match(G$aerobeTable$SampleID,G$s$SampleID)] <-
-  G$aerobeTable$Proportion
+resetData("toUse")
+resetUnifracData()
 
-G$s$aerobeToObligateAnaerobeRatio <- log10((G$s$aerobeProp + 0.00001) / (G$s$obligateAnaerobeProp + 0.00001))
+set.seed(1001)
+library(Rtsne)
+G$uur_tsne <- Rtsne(G$uur,is_distance=TRUE,verbose=TRUE,perplexity=10,max_iter=3000)
 
-pdf(paste0(work_dir, "R_plots/aerobic_status_sample.pdf"),
-    height=30, width=15, onefile = FALSE)
-G$anaerobeTable %>%
-  mutate(ProportionNA = ifelse(is.na(aerobic_status_corrected), Proportion, 0)) %>%
-  droplevels() %>%
-  mutate(SampleID = reorder(SampleID, speciesOrder)) %>%
-  ggplot() +
-  geom_bar(aes(x=SampleID, y=Proportion, fill=aerobic_status_corrected), stat="identity", position = "stack") +
-  coord_flip() +
-  scale_fill_brewer(palette="Paired", na.value="#CCCCCC") +
-  theme_bw()
-dev.off()
+G$classColors <- makeLegendColors(G$s$class)
+G$s$classColor <- G$classColors[G$s$class]
 
-G$anaerobeTableSpecies <- aggregate(Counts ~ common + aerobic_status_corrected + speciesOrder,
-                                    G$anaerobeTable,sum)
-G$anaerobeTableSpecies$Proportion <-
-  ave(G$anaerobeTableSpecies$Counts,G$anaerobeTableSpecies$common,
-      FUN=function(X) X / sum(X))
+G$classOrderNumber <-
+  unlist(sapply(unique(G$s$class),function(X) makeLegendShapes(G$s$order[G$s$class==X])))
 
-pdf(paste0(work_dir, "R_plots/aerobic_status_species.pdf"),
-    height=11, width=8, onefile = FALSE)
-G$anaerobeTableSpecies %>%
-  mutate(ProportionNA = ifelse(is.na(aerobic_status_corrected), Proportion, 0)) %>%
-  droplevels() %>%
-  mutate(common = reorder(common, speciesOrder)) %>%
-  ggplot() +
-  geom_bar(aes(x=common, y=Proportion, fill=aerobic_status_corrected), stat="identity", position = "stack") +
-  coord_flip() +
-  scale_fill_brewer(palette="Paired", na.value="#CCCCCC") +
-  theme_bw()
+G$s$orderShape <- as.numeric(G$classOrderNumber[as.character(G$s$order)])
+
+G$mammalOrderShapeLegend <-
+  G$classOrderNumber[names(G$classOrderNumber) %in% G$s$order[G$s$class=='Mammalia']]
+G$mammalOrderShapeLegend <- G$mammalOrderShapeLegend[order(G$mammalOrderShapeLegend)]
+
+G$insectOrderShapeLegend <-
+  G$classOrderNumber[names(G$classOrderNumber) %in% G$s$order[G$s$class=='Insecta']]
+G$insectOrderShapeLegend <- G$insectOrderShapeLegend[order(G$insectOrderShapeLegend)]
+
+pdf(paste0(work_dir, "R_plots/figure2.tsne.uur.pdf"),width=11,height=8)
+par(mar=c(4,4,1,12)) # need to leave margin room
+plot(G$uur_tsne$Y, col=G$s$classColor, pch=as.numeric(G$s$orderShape),
+     xlab="TSNE1",ylab="TSNE2", main="t-SNE plot for 266 samples")
+plotTsneLegends()
 dev.off()
 
 
-pdf(paste0(work_dir, "R_plots/aerobe_ratio.pdf"),
-    height=8, width=11, onefile = FALSE)
-plot(G$s$log.weight,G$s$aerobeToObligateAnaerobeRatio,
-     col=G$s$classColor,xlab="Weight (grams, log10)",
-     ylab="Ratio of aerobic reads to anaerobic reads",
-     main="Ratio of aerobic/anaerobic reads vs sample weight.\nColored by host class.")
-dev.off()
-
-G$species$aerobeToObligateAnaerobeRatio <-
-  with(aggregate(aerobeToObligateAnaerobeRatio ~ common,G$s, mean),
-       aerobeToObligateAnaerobeRatio[match(G$species$common,common)])
-G$species$log.weight <-
-  with(aggregate(log.weight ~ common,G$s, mean),
-       log.weight[match(G$species$common,common)])
-G$classColors <- makeLegendColors(G$species$class)
-G$species$classColor <- G$classColors[G$species$class]
-
-pdf(paste0(work_dir, "R_plots/aerobe_ratio_species.pdf"),
-    height=8, width=11, onefile = FALSE)
-plot(G$species$log.weight,G$species$aerobeToObligateAnaerobeRatio,
-     col=G$species$classColor,xlab="Weight (grams, log10)",
-     ylab="Ratio of aerobic reads to anaerobic reads",
-     main="Avg. ratio of aerobic/anaerobic reads vs avg. sample weight.\nAverages are by host species.\nColored by host class.")
-dev.off()
 
 
 # Figure 1G/H----
@@ -1091,10 +1027,122 @@ dev.off()
 
 
 
+# Figure A1----
+
+resetData("toUse")
+
+G$sampleMetadataDf <- do.call(rbind,
+                              list(data.frame(level="Phylum",
+                                              count=table(G$s$phylum[G$sampleOrdering])),
+                                   data.frame(level="Class",
+                                              count=table(G$s$class[G$sampleOrdering])),
+                                   data.frame(level="Order",
+                                              count=table(G$s$order[G$sampleOrdering])),
+                                   data.frame(level="Family",
+                                              count=table(G$s$family[G$sampleOrdering])),
+                                   data.frame(level="Species",
+                                              count=table(G$s$common[G$sampleOrdering]))))
+
+G$sampleMetadataDf$count.Var1 <-
+  factor(G$sampleMetadataDf$count.Var1,
+         levels = c(unique(as.character(G$speciesTax$phylum[G$figure1SpeciesOrdering])),
+                    unique(as.character(G$speciesTax$class[G$figure1SpeciesOrdering])),
+                    unique(as.character(G$speciesTax$order[G$figure1SpeciesOrdering])),
+                    unique(as.character(G$speciesTax$family[G$figure1SpeciesOrdering])),
+                    unique(as.character(G$speciesTax$common[G$figure1SpeciesOrdering]))))
+G$sampleMetadataDf <- G$sampleMetadataDf[match(levels(G$sampleMetadataDf$count.Var1),
+                                               G$sampleMetadataDf$count.Var1),]
+G$sampleMetadataDf <- G$sampleMetadataDf %>% group_by(level) %>%
+  mutate(cum.freq = cumsum(count.Freq) - 0.5*count.Freq)
+pal <- sapply(table(G$sampleMetadataDf$level),
+              function(X) colorRampPalette(c('red','blue','dark green'))(X))
+pal <- unname(unlist(pal))
+
+palSet <- colorRampPalette(c('blue','dark green'))(nrow(G$s))
+pal <- sapply(unique(G$sampleMetadataDf$level),
+              function(X) palSet[G$sampleMetadataDf$cum.freq[G$sampleMetadataDf$level==X]+0.5])
+pal <- unname(unlist(pal))
+
+G$sampleMetadataDf$labelSize <- sapply(G$sampleMetadataDf$count.Freq, function(X) 2 * min(X,3))
+
+pdf(paste0(work_dir, "R_plots/A1.final.pdf"),
+    height=30, width=15, onefile = FALSE)
+ggplot(G$sampleMetadataDf, aes(x = level, y = count.Freq, fill = count.Var1)) + 
+  geom_bar(stat = "identity", show.legend=FALSE) + 
+  scale_x_discrete(limits = c("Phylum","Class","Order","Family","Species"))  + 
+  scale_fill_manual(values=pal) +
+  theme_bw() + labs(y="Percent of OTUs in Wolbachia") +
+  theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank(),
+        panel.border = element_blank(), panel.grid.major = element_blank(), axis.title.x=element_blank(),
+        panel.grid.minor = element_blank(), axis.line = element_blank()) +
+  geom_text(aes(label=paste0(count.Var1,": ", count.Freq),
+                y=max(cum.freq)-cum.freq+0.5), colour="white",size=G$sampleMetadataDf$labelSize) +
+  scale_y_continuous(labels=waiver(), trans="reverse")
+dev.off()
 
 
-# NEEDS UPDATING----
-### Figure S7 (Val.)----
+# Figure A2----
+
+resetData("all")
+
+pdf(paste0(work_dir, "R_plots/A2.boxplot.readCounts.pdf"),width=11,height=8)
+par(mar=c(5,7,6,6))
+par(cex.lab=2)
+par(cex.main=2)
+boxplot(readCount ~ sample_type2, data = G$s, log = "y",
+        xlab="Sample type", ylab="Number of reads",
+        main="Number of reads per library by sample type")
+dev.off()
+
+
+# Figure A3----
+# Reads by OTU Phylum
+
+resetData("toUse")
+
+#load(paste0(work_dir, "R//good.20170830.RData")
+
+G$aPhylum <- sub("; c__(.)*$", "", G$o$metadata, perl=T)
+G$oByPhylum <- rowsum(G$o$counts,G$aPhylum)
+
+dataToPlot <- sort(rowSums(G$oByPhylum), decreasing = T)[1:9]
+dataToPlot <- data.frame(value=dataToPlot,phylum=names(dataToPlot))
+
+dataToPlot$phylum <- with(dataToPlot, factor(phylum, levels=c("Other",as.character(phylum[order(value)]))))
+dataToPlot[10,] <- cbind(sum(sort(rowSums(G$oByPhylum), decreasing = T)[-c(1:9)]), "Other")
+
+dataToPlot$value <- as.numeric(dataToPlot$value) / 1e6
+
+pdf(paste0(work_dir, "R_plots/supp3.pdf"), width = 10, height = 7)
+ggplot(dataToPlot, aes(x=phylum, y=value)) + geom_bar(stat="identity") +
+  coord_flip() + theme_bw() +
+  labs(y = "Number of reads (in millions)", x = "OTU Phylum") +
+  theme(panel.grid.major.y = element_blank(), panel.grid.minor = element_blank())
+dev.off()
+
+
+
+
+
+### Figures A4-A13 (Val.)----
+
+VA <- new.env()
+VA$otuTableFile <- paste0(work_dir, "validation/anteater/otu/otu_table.txt")
+VA$mapFile <- paste0(work_dir, "validation/anteater/map/map.tsv")
+resetValidationData(VA, "toUse")
+plotFigure1(VA, "anteater")
+
+VBi <- new.env()
+VBi$otuTableFile <- paste0(work_dir, "validation/bird/otu/otu_table.txt")
+VBi$mapFile <- paste0(work_dir, "validation/bird/map/map.tsv")
+resetValidationData(VBi, "toUse")
+plotFigure1(VBi, "bird")
+
+VBu <- new.env()
+VBu$otuTableFile <- paste0(work_dir, "validation/bug/otu/otu_table.txt")
+VBu$mapFile <- paste0(work_dir, "validation/bug/map/map.tsv")
+resetValidationData(VBu, "toUse")
+plotFigure1(VBu, "bug")
 
 VBR <- new.env()
 VBR$otuTableFile <- paste0(work_dir, "validation/bugRev/otu/otu_table.txt")
@@ -1102,11 +1150,124 @@ VBR$mapFile <- paste0(work_dir, "validation/bugRev/map/map.tsv")
 resetValidationData(VBR, "toUse")
 plotFigure1(VBR, "bugRev")
 
+VF <- new.env()
+VF$otuTableFile <- paste0(work_dir, "validation/fish/otu/otu_table.txt")
+VF$mapFile <- paste0(work_dir, "validation/fish/map/map.tsv")
+resetValidationData(VF, "toUse")
+plotFigure1(VF, "fish")
+
+VM <- new.env()
+VM$otuTableFile <- paste0(work_dir, "validation/muegge/otu/otu_table.txt")
+VM$mapFile <- paste0(work_dir, "validation/muegge/map/map.tsv")
+resetValidationData(VM, "toUse")
+plotFigure1(VM, "muegge454")
+
+VMI <- new.env()
+VMI$otuTableFile <- paste0(work_dir, "validation/mueggeIllumina/otu/otu_table.txt")
+VMI$mapFile <- paste0(work_dir, "validation/mueggeIllumina/map/map.tsv")
+resetValidationData(VMI, "toUse")
+plotFigure1(VMI, "mueggeIllumina")
+
+VP <- new.env()
+VP$otuTableFile <- paste0(work_dir, "validation/primates/otu/otu_table.txt")
+VP$mapFile <- paste0(work_dir, "validation/primates/map/map.tsv")
+resetValidationData(VP, "toUse")
+plotFigure1(VP, "primates")
+
+VW <- new.env()
+VW$otuTableFile <- paste0(work_dir, "validation/whale454/otu/otu_table.txt")
+VW$mapFile <- paste0(work_dir, "validation/whale454/map/map.tsv")
+resetValidationData(VW, "toUse")
+plotFigure1(VW, "whale454")
+
 VB <- new.env()
-VB$otuTableFile <- paste0(work_dir, "validation/bug/otu/otu_table.txt")
-VB$mapFile <- paste0(work_dir, "validation/bug/map/map.tsv")
+VB$otuTableFile <- paste0(work_dir, "validation/whaleIllumina/otu/otu_table.txt")
+VB$mapFile <- paste0(work_dir, "validation/whaleIllumina/map/map.tsv")
 resetValidationData(VB, "toUse")
-plotFigure1(VB, "bug")
+plotFigure1(VB, "whaleIllumina")
+
+
+
+
+
+
+
+# Figure A14----
+# Aerobic status of bacteria
+
+G$anaerobeTable <-read.csv(paste0(work_dir,"bilaterian_aerotolerance.csv"),header=T,
+                           na.strings="<NA>",stringsAsFactors = F)
+G$anaerobeTable$speciesOrder <- G$s[G$anaerobeTable$SampleID,"speciesOrder"]
+G$anaerobeTable <-
+  G$anaerobeTable[!G$anaerobeTable$aerobic_status_corrected=="NA",]
+G$anaerobeTable <-
+  G$anaerobeTable[!G$anaerobeTable$aerobic_status_corrected=="no taxonomic assignment",]
+G$anaerobeTable <-
+  G$anaerobeTable[!G$anaerobeTable$aerobic_status_corrected=="Streptophyta",]
+G$anaerobeTable$Proportion <-
+  ave(G$anaerobeTable$Counts,G$anaerobeTable$SampleID,
+      FUN=function(X) X / sum(X))
+
+G$aerobeTable <-
+  G$anaerobeTable[G$anaerobeTable$aerobic_status_corrected=="aerobe",]
+G$s$aerobeProp <- 0
+G$s$aerobeProp[match(G$aerobeTable$SampleID,G$s$SampleID)] <-
+  G$aerobeTable$Proportion
+
+G$obligateAnaerobeTable <-
+  G$anaerobeTable[G$anaerobeTable$aerobic_status_corrected=="obligate anaerobe",]
+G$s$obligateAnaerobeProp <- 0
+G$s$obligateAnaerobeProp[match(G$obligateAnaerobeTable$SampleID,G$s$SampleID)] <-
+  G$obligateAnaerobeTable$Proportion
+
+G$s$aerobeToObligateAnaerobeRatio <-
+  log10((G$s$aerobeProp + 0.00001) / (G$s$obligateAnaerobeProp + 0.00001))
+
+G$anaerobeTableSpecies <- aggregate(Counts ~ common + aerobic_status_corrected + speciesOrder,
+                                    G$anaerobeTable,sum)
+G$anaerobeTableSpecies$Proportion <-
+  ave(G$anaerobeTableSpecies$Counts,G$anaerobeTableSpecies$common,
+      FUN=function(X) X / sum(X))
+
+pdf(paste0(work_dir, "R_plots/aerobic_status_species.pdf"),
+    height=11, width=8, onefile = FALSE)
+G$anaerobeTableSpecies %>%
+  mutate(ProportionNA = ifelse(is.na(aerobic_status_corrected), Proportion, 0)) %>%
+  droplevels() %>%
+  mutate(common = reorder(common, speciesOrder)) %>%
+  ggplot() +
+  geom_bar(aes(x=common, y=Proportion, fill=aerobic_status_corrected), stat="identity", position = "stack") +
+  coord_flip() +
+  scale_fill_brewer(palette="Paired", na.value="#CCCCCC") +
+  theme_bw()
+dev.off()
+
+
+pdf(paste0(work_dir, "R_plots/aerobe_ratio.pdf"),
+    height=8, width=11, onefile = FALSE)
+plot(G$s$log.weight,G$s$aerobeToObligateAnaerobeRatio,
+     col=G$s$classColor,xlab="Weight (grams, log10)",
+     ylab="Ratio of aerobic reads to anaerobic reads",
+     main="Ratio of aerobic/anaerobic reads vs sample weight.\nColored by host class.")
+dev.off()
+
+G$species$aerobeToObligateAnaerobeRatio <-
+  with(aggregate(aerobeToObligateAnaerobeRatio ~ common,G$s, mean),
+       aerobeToObligateAnaerobeRatio[match(G$species$common,common)])
+G$species$log.weight <-
+  with(aggregate(log.weight ~ common,G$s, mean),
+       log.weight[match(G$species$common,common)])
+G$classColors <- makeLegendColors(G$species$class)
+G$species$classColor <- G$classColors[G$species$class]
+
+pdf(paste0(work_dir, "R_plots/aerobe_ratio_species.pdf"),
+    height=8, width=11, onefile = FALSE)
+plot(G$species$log.weight,G$species$aerobeToObligateAnaerobeRatio,
+     col=G$species$classColor,xlab="Weight (grams, log10)",
+     ylab="Ratio of aerobic reads to anaerobic reads",
+     main="Avg. ratio of aerobic/anaerobic reads vs avg. sample weight.\nAverages are by host species.\nColored by host class.")
+dev.off()
+
 
 ### Marine bacteria----
 
@@ -1184,7 +1345,8 @@ G$percentRoseobacterBySpecies <-
 
 
 
-
+# Adonis Unifrac stats----
+# NEEDS UPDATING----
 
 G$wnuMatrix <- as.matrix(G$wnu)
 pheatmap(G$wnuMatrix, fontsize = 6)
@@ -1433,110 +1595,6 @@ adonis(G$uurDistM ~ diet + order, G$species, permutations = nperm)
 
 
 
-
-
-# Figure A1----
-
-resetData("toUse")
-
-G$sampleMetadataDf <- do.call(rbind,
-                              list(data.frame(level="Phylum",
-                                              count=table(G$s$phylum[G$sampleOrdering])),
-                                   data.frame(level="Class",
-                                              count=table(G$s$class[G$sampleOrdering])),
-                                   data.frame(level="Order",
-                                              count=table(G$s$order[G$sampleOrdering])),
-                                   data.frame(level="Family",
-                                              count=table(G$s$family[G$sampleOrdering])),
-                                   data.frame(level="Species",
-                                              count=table(G$s$common[G$sampleOrdering]))))
-
-G$sampleMetadataDf$count.Var1 <-
-  factor(G$sampleMetadataDf$count.Var1,
-         levels = c(unique(as.character(G$speciesTax$phylum[G$figure1SpeciesOrdering])),
-                    unique(as.character(G$speciesTax$class[G$figure1SpeciesOrdering])),
-                    unique(as.character(G$speciesTax$order[G$figure1SpeciesOrdering])),
-                    unique(as.character(G$speciesTax$family[G$figure1SpeciesOrdering])),
-                    unique(as.character(G$speciesTax$common[G$figure1SpeciesOrdering]))))
-G$sampleMetadataDf <- G$sampleMetadataDf[match(levels(G$sampleMetadataDf$count.Var1),
-                                               G$sampleMetadataDf$count.Var1),]
-G$sampleMetadataDf <- G$sampleMetadataDf %>% group_by(level) %>%
-  mutate(cum.freq = cumsum(count.Freq) - 0.5*count.Freq)
-pal <- sapply(table(G$sampleMetadataDf$level),
-             function(X) colorRampPalette(c('red','blue','dark green'))(X))
-pal <- unname(unlist(pal))
-
-palSet <- colorRampPalette(c('blue','dark green'))(nrow(G$s))
-pal <- sapply(unique(G$sampleMetadataDf$level),
-              function(X) palSet[G$sampleMetadataDf$cum.freq[G$sampleMetadataDf$level==X]+0.5])
-pal <- unname(unlist(pal))
-
-G$sampleMetadataDf$labelSize <- sapply(G$sampleMetadataDf$count.Freq, function(X) 2 * min(X,3))
-
-pdf(paste0(work_dir, "R_plots/A1.final.pdf"),
-    height=30, width=15, onefile = FALSE)
-ggplot(G$sampleMetadataDf, aes(x = level, y = count.Freq, fill = count.Var1)) + 
-  geom_bar(stat = "identity", show.legend=FALSE) + 
-  scale_x_discrete(limits = c("Phylum","Class","Order","Family","Species"))  + 
-  scale_fill_manual(values=pal) +
-  theme_bw() + labs(y="Percent of OTUs in Wolbachia") +
-  theme(axis.title.y=element_blank(), axis.text.y=element_blank(), axis.ticks.y=element_blank(),
-        panel.border = element_blank(), panel.grid.major = element_blank(), axis.title.x=element_blank(),
-        panel.grid.minor = element_blank(), axis.line = element_blank()) +
-  geom_text(aes(label=paste0(count.Var1,": ", count.Freq),
-                y=max(cum.freq)-cum.freq+0.5), colour="white",size=G$sampleMetadataDf$labelSize) +
-  scale_y_continuous(labels=waiver(), trans="reverse")
-dev.off()
-
-
-
-# Figure 2 (tSNE)----
-# PCoA, tsne, heatmaps for final figures
-
-resetData("toUse")
-resetUnifracData()
-
-set.seed(1001)
-G$uur_tsne <- Rtsne(G$uur,is_distance=TRUE,verbose=TRUE,perplexity=10,max_iter=3000)
-
-G$classColors <- makeLegendColors(G$s$class)
-G$s$classColor <- G$classColors[[1]][G$s$class]
-
-G$classOrderNumber <-
-  do.call(rbind, sapply(unique(G$s$class),function(X) makeLegendShapes(G$s$order[G$s$class==X])))
-
-G$s$orderShape <- as.numeric(G$classOrderNumber[as.character(G$s$order),2])
-
-G$mammalOrderShapeLegend <-
-  G$classOrderNumber[rownames(G$classOrderNumber) %in% G$s$order[G$s$class=='Mammalia'],]
-G$mammalOrderShapeLegend <- G$mammalOrderShapeLegend[order(G$mammalOrderShapeLegend[,1]),]
-
-G$insectOrderShapeLegend <-
-  G$classOrderNumber[rownames(G$classOrderNumber) %in% G$s$order[G$s$class=='Insecta'],]
-G$insectOrderShapeLegend <- G$insectOrderShapeLegend[order(G$insectOrderShapeLegend[,1]),]
-
-pdf(paste0(work_dir, "R_plots/figure2.tsne.uur.pdf"),width=11,height=8)
-par(mar=c(4,4,1,12)) # need to leave margin room
-plot(G$uur_tsne$Y, col=G$s$classColor, pch=as.numeric(G$s$orderShape),
-     xlab="TSNE1",ylab="TSNE2", main="t-SNE plot for 266 samples")
-plotTsneLegends()
-dev.off()
-
-
-
-
-# Figure A2----
-
-resetData("all")
-
-pdf(paste0(work_dir, "R_plots/A2.boxplot.readCounts.pdf"),width=11,height=8)
-par(mar=c(5,7,6,6))
-par(cex.lab=2)
-par(cex.main=2)
-boxplot(readCount ~ sample_type2, data = G$s, log = "y",
-        xlab="Sample type", ylab="Number of reads",
-        main="Number of reads per library by sample type")
-dev.off()
 
 
 

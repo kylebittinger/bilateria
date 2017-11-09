@@ -562,53 +562,14 @@ makeLegendShapes <- function(vector) {
 
 
 # Export OTU tables----
-# NEEDS UPDATING----
-
 # Top 10000 OTUs by total abundance for used samples + controls (311 total)
-
-# All samples
-resetData()
-write.table(cbind(G$o$metadata[rownames(G$o$counts)],G$o$counts),
-            paste0(work_dir, "toShare/otuCount.all.csv"),
-            row.names=FALSE,sep=",",quote = FALSE)
-
-# Remove singleton OTUs
-G$o$counts2 <- G$o$counts[rowSums(G$o$counts)>1,]
-write.table(cbind(G$o$metadata[rownames(G$o$counts2)],G$o$counts2),
-            paste0(work_dir, "toShare/otuCount.all.noSingletons.csv"),
-            row.names=FALSE,sep=",",quote = FALSE)
-
-# Remove controls and failed samples
-resetData("toUse")
-write.table(cbind(G$o$metadata[rownames(G$o$counts)],G$o$counts),
-            paste0(work_dir, "toShare/otuCount.final.csv"),
-            row.names=FALSE,sep=",",quote = FALSE)
-
-# Remove OTUs with < 10 reads
-G$o$counts2 <- G$o$counts[rowSums(G$o$counts)>=10,]
-write.table(cbind(G$o$metadata[rownames(G$o$counts2)],G$o$counts2),
-            paste0(work_dir, "toShare/otuCount.final.min10.csv"),
-            sep=",",quote = FALSE)
-
-# Aggregate on taxonomy
-G$o$countsWithTaxa <- cbind(G$o$metadata[rownames(G$o$counts)],G$o$counts)
-colnames(G$o$countsWithTaxa)[1] <- "taxonomy"
-G$o$countsByTaxa <- aggregate(G$o$counts,by=list(G$o$metadata[rownames(G$o$counts)]),FUN=sum)
-colnames(G$o$countsByTaxa)[1] <- "Taxonomy"
-G$o$countsByTaxa$numOtus <-sapply(G$o$countsByTaxa$Taxonomy,
-                                  function(X){ sum(G$o$metadata==X) })
-G$o$countsByTaxa$otuPhylum <- sub("; c__(.)*$", "", G$o$countsByTaxa$Taxonomy, perl=T)
-G$o$countsByTaxa$numReads <- sapply(G$o$countsByTaxa$Taxonomy,
-                                    function(X) { sum(G$o$counts[G$o$metadata==X,]) })
-G$o$phylaData <- aggregate(G$o$countsByTaxa[,c("numOtus","numReads")],
-                           by=list(G$o$countsByTaxa$otuPhylum),sum)
 
 resetData("toUsePlusControls")
 G$o$prop <- apply(G$o$counts, 2, function(x) ifelse (x, x / sum(x),0))
 G$maxOtuPropAll <- apply(G$o$prop, 1, max)
 G$finalOtuTable <- G$o$counts[names(sort(G$maxOtuPropAll, decreasing=T))[1:10000],]
 write.table(cbind(G$o$metadata[rownames(G$finalOtuTable)],G$finalOtuTable),
-            paste0(work_dir, "toShare/otuTable.final.csv"),
+            paste0(work_dir, "otuTable.final.csv"),
             row.names=T,sep=",",quote = FALSE)
 
 
@@ -1463,98 +1424,11 @@ G$percentRoseobacterBySpecies <-
 
 
 # Adonis Unifrac stats----
-# NEEDS UPDATING----
 
-G$wnuMatrix <- as.matrix(G$wnu)
-pheatmap(G$wnuMatrix, fontsize = 6)
-
-G$wnuDist <- G$phyMatrix
-G$wnuDist[,] <- 0
-for(i in rownames(G$wnuDist)) {
-  for(j in colnames(G$wnuDist)) {
-    if(i==j) {
-      G$wnuDist[i,j] <- 0
-    } else {
-      G$wnuDist[i,j] <- cd(G$wnuMatrix,
-                           rownames(G$wnuMatrix)[rownames(G$wnuMatrix) %in% G$s$SampleID[G$s$common==i]],
-                           rownames(G$wnuMatrix)[rownames(G$wnuMatrix) %in% G$s$SampleID[G$s$common==j]])
-    }
-  }
-}
-
-set.seed(1017)
-G$wnuDist_tsne <- Rtsne(G$wnuDist,is_distance=TRUE,perplexity=20,max_iter=3000)
-pdf(paste0(work_dir, "R_plots/A16.wnu.speciesCentroid.tsne.pdf"),
-    height=8, width=11, onefile = FALSE)
-par(mar=c(4,4,1,12)) # need to leave margin room
-plot(G$wnuDist_tsne$Y,col=G$speciesClassColors,xlab="",ylab="", cex=0.1,
-     main="t-SNE clustering of species centroid of weighted Unifrac distances between normalized OTU counts")
-text(G$wnuDist_tsne$Y[,1],G$wnuDist_tsne$Y[,2],rownames(G$wnuDist),col = G$speciesClassColors,
-     cex=0.5)
-dev.off()
-
-pdf(paste0(work_dir, "R_plots/A16.wnu.speciesCentroid.tsne.points.pdf"),
-    height=8, width=11, onefile = FALSE)
-par(mar=c(4,4,1,12)) # need to leave margin room
-plot(G$wnuDist_tsne$Y,col=G$speciesClassColors,xlab="",ylab="", cex=1,
-     main="t-SNE clustering of species centroid of weighted Unifrac distances between normalized OTU counts")
-dev.off()
-
-
-G$o$prop <- apply(G$o$counts, 2, function(x) ifelse (x, x / sum(x),0))
-G$tree <- ape::multi2di(phyloseq::read_tree(paste0(work_dir, "otu_good/rep_set.tre")))
-G$qiimeDataProp <- phyloseq(otu_table=otu_table(G$o$prop, taxa_are_rows = TRUE),phy_tree=G$tree)
-
-G$o$rare <- apply(G$o$counts,2,function(x) rrarefy(x,1000))
-rownames(G$o$rare) <- rownames(G$o$counts)
-G$qiimeDataRare <- phyloseq(otu_table=otu_table(G$o$rare, taxa_are_rows = TRUE),phy_tree=G$tree)
-
-G$uur2 <- UniFrac(G$qiimeDataRare,weighted=FALSE)
-G$bcr2 <- distance(G$qiimeDataRare,'bray',binary=TRUE)
-G$wnu2 <- UniFrac(G$qiimeDataProp,weighted=TRUE)
-G$bcp2 <- distance(G$qiimeDataProp,'bray',binary=FALSE)
-
-adonis(G$uur2)
-
-G$mantels<-list(
-  'uniW'=ade4::mantel.rtest(G$uniDist,G$uniDistW,nrepet=1e4),
-  'brayW'=ade4::mantel.rtest(G$uniDist,G$brayDistW,nrepet=1e4),
-  'brayUW'=ade4::mantel.rtest(G$uniDist,G$brayDist,nrepet=1e4)
-)
-
-adonis(G$uur2 ~ common,
-       G$s[match(G$s$SampleID,attr(G$uur2,"Labels")),],
-       permutations = nperm)
-
-adonis(G$bcr2 ~ common,
-       G$s[match(G$s$SampleID,attr(G$bcr2,"Labels")),],
-       permutations = nperm)
-
-adonis(G$wnu2 ~ common,
-       G$s[match(G$s$SampleID,attr(G$wnu2,"Labels")),],
-       permutations = nperm)
-
-adonis(G$bcp2 ~ common,
-       G$s[match(G$s$SampleID,attr(G$bcp2,"Labels")),],
-       permutations = nperm)
-
-G$s$classColor <- G$classColors[G$s$class]
-
-set.seed(1001)
-G$uur2_tsne <- Rtsne(G$uur2,is_distance=TRUE,perplexity=20,max_iter=3000)
-
-#pdf(paste0(work_dir, "R_plots/pcoa/wnu.speciesCentroid.tsne.pdf",
-#    height=8, width=11, onefile = FALSE)
-par(mar=c(4,4,1,12)) # need to leave margin room
-plot(G$uur2_tsne$Y,col=G$s$classColor,xlab="",ylab="", cex=0.1,
-     main="t-SNE clustering of species centroid of weighted Unifrac distances between normalized OTU counts")
-text(G$uur2_tsne$Y[,1],G$uur2_tsne$Y[,2],labels(G$uur2),col = G$s$classColor,
-     cex=0.5)
-#dev.off()
-
-
+resetData("toUse")
+resetUnifracData()
 nperm <- 1000000
-nperm <- 1000
+
 
 adonis(G$uur ~ phylum + class + order + family + genus + common,
        G$s[match(G$s$SampleID,attr(G$uur,"Labels")),],
@@ -1683,6 +1557,15 @@ adonis(G$bcp ~ common, G$s[match(attr(G$uur,"Labels"),G$s$SampleID),],
 resetData("toUse")
 resetUnifracData()
 
+G$phyMatrix <- cophenetic.phylo(G$newick)
+rownames(G$phyMatrix) <-
+  G$speciesTax$common[match(tolower(gsub("_"," ",rownames(G$phyMatrix))),
+                            G$speciesTax$timetree_proxy)]
+colnames(G$phyMatrix) <- rownames(G$phyMatrix)
+G$phyMatrix <-
+  G$phyMatrix[match(G$speciesTax$common[G$figure1SpeciesOrdering],rownames(G$phyMatrix)),
+              match(G$speciesTax$common[G$figure1SpeciesOrdering],colnames(G$phyMatrix))]
+
 G$phyDist <- as.dist(G$phyMatrix)
 
 adonis(G$phyDist ~ diet, G$species, permutations = nperm)
@@ -1696,6 +1579,29 @@ adonis(G$phyDist ~ class, G$species, permutations = nperm)
 ###
 ### Adonis on species centroids
 ###
+
+resetData("toUse")
+resetUnifracData()
+
+G$uurMatrix <- as.matrix(G$uur)
+
+G$uurDist <- matrix(nrow=length(unique(G$s$common)), ncol=length(unique(G$s$common)))
+G$uurDist[,] <- 0
+rownames(G$uurDist) <- unique(G$s$common)
+colnames(G$uurDist) <- unique(G$s$common)
+for(i in rownames(G$uurDist)) {
+  for(j in colnames(G$uurDist)) {
+    if(i==j) {
+      G$uurDist[i,j] <- 0
+    } else {
+      G$uurDist[i,j] <- getCdCommon(G$uurMatrix,G$s,i,j)
+    }
+  }
+}
+
+G$uurDist <- G$uurDist[G$figure1SpeciesOrdering,G$figure1SpeciesOrdering]
+
+G$uurDistM <- as.matrix(G$uurDist)
 
 adonis(G$uurDistM ~ diet, G$species, permutations = nperm)
 adonis(G$uurDistM ~ specificDiet, G$species, permutations = nperm)

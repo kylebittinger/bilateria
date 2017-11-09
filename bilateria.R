@@ -165,7 +165,8 @@ resetData <- function(status = "all") {
   adf <- split_assignments(md)
   G$a <- simplify_assignments(adf)
   rm(md); rm(adf)
-  
+
+  library(ape)  
   G$newick <- read.tree(paste0(work_dir, "speciesPhylogeny.nwk"))
 
   G$timetreeLabels <-
@@ -189,7 +190,7 @@ resetUnifracData <- function(){
   G$uur <- read_qiime_distmat(G$uur_fp)
   G$uur <- dist_subset(G$uur, G$s$SampleID)
 
-  G$wnu_fp <- file.path(work_dir, "bd_wnu", "weighted_unifrac_otu_prop.txt")
+  G$wnu_fp <- file.path(work_dir, "bd_wnu", "weighted_normalized_unifrac_otu_table.txt")
   G$wnu <- read_qiime_distmat(G$wnu_fp)
   G$wnu <- dist_subset(G$wnu, G$s$SampleID)
 }
@@ -525,10 +526,45 @@ countsToProp <- function(counts) {
   return(apply(counts, 2, function(x)   ifelse (x, x / sum(x),0)))
 }
 
+ss <- function(d) {
+  sum(d[lower.tri(d)]^2)
+}
+
+cd <- function(m,xlabs,ylabs) {
+  x <- as.matrix(m[xlabs,xlabs])
+  n.x <- nrow(x)
+  y <- as.matrix(m[ylabs,ylabs])
+  n.y <- nrow(y)
+  xy <- m[c(xlabs,ylabs),c(xlabs,ylabs)]
+  return(sqrt( (ss(xy) - (n.x + n.y) * (ss(x)/n.x + ss(y)/n.y)) / (n.x*n.y)))
+}
+
+getCdCommon <- function(m,s,common1,common2) {
+  return(cd(m,
+            rownames(m)[rownames(m) %in% s$SampleID[s$common==common1]],
+            rownames(m)[rownames(m) %in% s$SampleID[s$common==common2]]))
+}
+
+makeLegendColors <- function(vector) {
+  legendColors <- rainbow(length(unique(vector)))
+  names(legendColors) <- sort(unique(vector))
+  return(legendColors)
+}
+
+makeLegendShapes <- function(vector) {
+  if(length(unique(vector)) > 8) { stop("Can't make order legend for more than 8 unique values.")}
+  vectorOrder <- as.matrix(unique(cbind(as.character(vector),as.numeric(factor(vector)))))
+  orderShapeList <- c(15,17,18,19,21,22,23,24,25)
+  newVectorOrder <- as.numeric(orderShapeList[as.numeric(vectorOrder[,2])])
+  names(newVectorOrder) <- vectorOrder[,1]
+  return(newVectorOrder)
+}
 
 
 # Export OTU tables----
 # NEEDS UPDATING----
+
+# Top 10000 OTUs by total abundance for used samples + controls (311 total)
 
 # All samples
 resetData()
@@ -580,14 +616,8 @@ write.table(cbind(G$o$metadata[rownames(G$finalOtuTable)],G$finalOtuTable),
 
 # Run Unifrac----
 resetData("toUse")
-G$o$prop <- countsToProp(G$o$counts)
-write.table(cbind(G$o$prop,G$o$metadata),paste0(work_dir,"otu/otu_prop.txt"), quote = F, sep = "\t")
-system(paste0("sed -i '1s/^/# Constructed from biom file\\n#OTU ID\t/' ",work_dir,"otu/otu_prop.txt"))
-system(paste0("sed -i '2s/$/Consensus Lineage/' ",work_dir,"otu/otu_prop.txt"))
-system(paste0("biom convert -i ",work_dir,"otu/otu_prop.txt -o ",work_dir,
-              "otu/otu_prop.biom --table-type=\"OTU table\" --to-hdf5"))
-system(paste0("beta_diversity.py -i ",work_dir,"otu/otu_prop.biom -o ",work_dir,
-              "bd_wnu -t ",work_dir,"otu/rep_set.tre -m weighted_unifrac"))
+system(paste0("beta_diversity.py -i ",work_dir,"otu/otu_table.biom -o ",work_dir,
+              "bd_wnu -t ",work_dir,"otu/rep_set.tre -m weighted_normalized_unifrac"))
 
 G$o$rare <- apply(G$o$counts,2,function(x) rarefyCounts(x,1000))
 rownames(G$o$rare) <- rownames(G$o$counts)
@@ -658,7 +688,7 @@ plotHeatmap <- ggplot(G$obpHeatmapData, aes(x=variable, y=common, fill=value)) +
 
 # Bar chart of max OTU
 
-G$o$prop <- apply(G$o$counts, 2, function(x) ifelse (x, x / sum(x),0))
+G$o$prop <- countsToProp(G$o$counts)
 
 G$o$maxProp <- apply(G$o$prop, 2, max)
 G$o$maxProp <- G$o$maxProp[match(G$s$SampleID[G$sampleOrdering],
@@ -890,7 +920,7 @@ resetUnifracData()
 
 set.seed(1001)
 library(Rtsne)
-G$uur_tsne <- Rtsne(G$uur,is_distance=TRUE,verbose=TRUE,perplexity=10,max_iter=3000)
+G$uur_tsne <- Rtsne(G$uur,is_distance=TRUE,perplexity=10,max_iter=3000)
 
 G$classColors <- makeLegendColors(G$s$class)
 G$s$classColor <- G$classColors[G$s$class]
@@ -1269,7 +1299,94 @@ plot(G$species$log.weight,G$species$aerobeToObligateAnaerobeRatio,
 dev.off()
 
 
-### Marine bacteria----
+# Figure A15----
+
+resetData("toUse")
+resetUnifracData()
+
+G$classColors <- makeLegendColors(G$species$class)
+G$species$classColor <- G$classColors[G$species$class]
+
+G$uurMatrix <- as.matrix(G$uur)
+
+G$uurDist <- matrix(nrow=length(unique(G$s$common)), ncol=length(unique(G$s$common)))
+G$uurDist[,] <- 0
+rownames(G$uurDist) <- unique(G$s$common)
+colnames(G$uurDist) <- unique(G$s$common)
+for(i in rownames(G$uurDist)) {
+  for(j in colnames(G$uurDist)) {
+    if(i==j) {
+      G$uurDist[i,j] <- 0
+    } else {
+      G$uurDist[i,j] <- getCdCommon(G$uurMatrix,G$s,i,j)
+    }
+  }
+}
+
+G$uurDist <- G$uurDist[G$figure1SpeciesOrdering,G$figure1SpeciesOrdering]
+
+set.seed(1001)
+library(Rtsne)
+G$uurDist_tsne <- Rtsne(G$uurDist,is_distance=TRUE,perplexity=10,max_iter=3000)
+pdf("/home/kevin/projects/islandGut/R_plots/pcoa/uur.speciesCentroid.tsne.pdf",
+    height=8, width=11, onefile = FALSE)
+par(mar=c(4,4,1,12)) # need to leave margin room
+plot(G$uurDist_tsne$Y,col=G$species$classColor,xlab="",ylab="", cex=0.1,
+     main="t-SNE clustering of species centroid of weighted Unifrac distances between normalized OTU counts")
+text(G$uurDist_tsne$Y[,1],G$uurDist_tsne$Y[,2],rownames(G$uurDist),col = G$species$classColor,
+     cex=0.5)
+dev.off()
+
+pdf("/home/kevin/projects/islandGut/R_plots/pcoa/uur.speciesCentroid.tsne.points.pdf",
+    height=8, width=11, onefile = FALSE)
+par(mar=c(4,4,1,12)) # need to leave margin room
+plot(G$uurDist_tsne$Y,col=G$species$classColor,xlab="",ylab="", cex=1,
+     main="t-SNE clustering of species centroid of weighted Unifrac distances between normalized OTU counts")
+dev.off()
+
+
+
+G$wnuMatrix <- as.matrix(G$wnu)
+
+G$wnuDist <- matrix(nrow=length(unique(G$s$common)), ncol=length(unique(G$s$common)))
+G$wnuDist[,] <- 0
+rownames(G$wnuDist) <- unique(G$s$common)
+colnames(G$wnuDist) <- unique(G$s$common)
+for(i in rownames(G$wnuDist)) {
+  for(j in colnames(G$wnuDist)) {
+    if(i==j) {
+      G$wnuDist[i,j] <- 0
+    } else {
+      G$wnuDist[i,j] <- getCdCommon(G$wnuMatrix,G$s,i,j)
+    }
+  }
+}
+
+G$wnuDist <- G$wnuDist[G$figure1SpeciesOrdering,G$figure1SpeciesOrdering]
+
+set.seed(1001)
+library(Rtsne)
+G$wnuDist_tsne <- Rtsne(G$wnuDist,is_distance=TRUE,perplexity=10,max_iter=3000)
+pdf("/home/kevin/projects/islandGut/R_plots/pcoa/wnu.speciesCentroid.tsne.pdf",
+    height=8, width=11, onefile = FALSE)
+par(mar=c(4,4,1,12)) # need to leave margin room
+plot(G$wnuDist_tsne$Y,col=G$species$classColor,xlab="",ylab="", cex=0.1,
+     main="t-SNE clustering of species centroid of weighted Unifrac distances between normalized OTU counts")
+text(G$wnuDist_tsne$Y[,1],G$wnuDist_tsne$Y[,2],rownames(G$wnuDist),col = G$species$classColor,
+     cex=0.5)
+dev.off()
+
+pdf("/home/kevin/projects/islandGut/R_plots/pcoa/wnu.speciesCentroid.tsne.points.pdf",
+    height=8, width=11, onefile = FALSE)
+par(mar=c(4,4,1,12)) # need to leave margin room
+plot(G$wnuDist_tsne$Y,col=G$species$classColor,xlab="",ylab="", cex=1,
+     main="t-SNE clustering of species centroid of weighted Unifrac distances between normalized OTU counts")
+dev.off()
+
+
+
+
+# Marine bacteria----
 
 resetData("toUse")
 
@@ -1366,7 +1483,7 @@ for(i in rownames(G$wnuDist)) {
 }
 
 set.seed(1017)
-G$wnuDist_tsne <- Rtsne(G$wnuDist,is_distance=TRUE,verbose=TRUE,perplexity=20,max_iter=3000)
+G$wnuDist_tsne <- Rtsne(G$wnuDist,is_distance=TRUE,perplexity=20,max_iter=3000)
 pdf(paste0(work_dir, "R_plots/A16.wnu.speciesCentroid.tsne.pdf"),
     height=8, width=11, onefile = FALSE)
 par(mar=c(4,4,1,12)) # need to leave margin room
@@ -1383,7 +1500,6 @@ plot(G$wnuDist_tsne$Y,col=G$speciesClassColors,xlab="",ylab="", cex=1,
      main="t-SNE clustering of species centroid of weighted Unifrac distances between normalized OTU counts")
 dev.off()
 
-#mantel.test(G$uurDistM,G$phyDist,nperm=1e6)
 
 G$o$prop <- apply(G$o$counts, 2, function(x) ifelse (x, x / sum(x),0))
 G$tree <- ape::multi2di(phyloseq::read_tree(paste0(work_dir, "otu_good/rep_set.tre")))
@@ -1425,7 +1541,7 @@ adonis(G$bcp2 ~ common,
 G$s$classColor <- G$classColors[G$s$class]
 
 set.seed(1001)
-G$uur2_tsne <- Rtsne(G$uur2,is_distance=TRUE,verbose=TRUE,perplexity=20,max_iter=3000)
+G$uur2_tsne <- Rtsne(G$uur2,is_distance=TRUE,perplexity=20,max_iter=3000)
 
 #pdf(paste0(work_dir, "R_plots/pcoa/wnu.speciesCentroid.tsne.pdf",
 #    height=8, width=11, onefile = FALSE)
